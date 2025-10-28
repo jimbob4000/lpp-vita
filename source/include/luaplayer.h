@@ -64,6 +64,7 @@ void luaVideo_init(lua_State *L);
 void luaDatabase_init(lua_State *L);
 void luaRegistry_init(lua_State *L);
 void luaGui_init(lua_State *L);
+void LuaExtended_init(lua_State *L);
 
 // lua-compat
 #define lua_callk(L, na, nr, ctx, cont) ((void)(ctx), (void)(cont), lua_call(L, na, nr))

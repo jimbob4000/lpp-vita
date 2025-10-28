@@ -31,6 +31,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 extern "C" {
 #include <png.h>
 #include <libimagequant.h>
@@ -1821,6 +1823,73 @@ static int lua_promote(lua_State *L) {
 	return 0;
 }
 
+void recursive_delete(const char *path) {
+	SceIoDirent entry;
+	int fd = sceIoDopen(path);
+	if (fd < 0) return;
+	
+	char buf[512];
+	while (sceIoDread(fd, &entry) > 0) {
+		if (!strcmp(entry.d_name, ".") || !strcmp(entry.d_name, "..")) continue;
+		snprintf(buf, sizeof(buf), "%s/%s", path, entry.d_name);
+		
+		if (SCE_S_ISDIR(entry.d_stat.st_mode)) {
+			recursive_delete(buf);
+			sceIoRmdir(buf);
+		} else {
+			sceIoRemove(buf);
+		}
+	}
+	sceIoDclose(fd);
+	sceIoRmdir(path);
+}
+
+static int lua_installVpk(lua_State *L) {
+	// Implementation for installing VPK files
+	const char *vpkPath = luaL_checkstring(L, 1); // Path to the VPK file
+	const char *extractDir = "ux0:data/temp/RetroFlow/install/app";
+
+	// Remove previous extracted files if any (optional, for clean install)
+	recursive_delete(extractDir);
+
+	// Ensure stack is clean before pushing arguments
+	lua_settop(L, 0);
+	lua_pushstring(L, vpkPath);
+	lua_pushstring(L, extractDir);
+	if (lua_ZipExtract(L) != 0) {
+		lua_settop(L, 0);
+		lua_pushboolean(L, 0);
+		lua_pushstring(L, "Failed to extract VPK");
+		return 2;
+	}
+
+	// Directly call the internal install logic (from lua_promote)
+
+#ifndef SKIP_ERROR_HANDLING
+	if (!unsafe_mode) {
+		lua_settop(L, 0);
+		lua_pushboolean(L, 0);
+		lua_pushstring(L, "this function requires unsafe mode");
+		return 2;
+	}
+#endif
+
+	loadPromoter();
+	makeHeadBin(extractDir);
+	scePromoterUtilityPromotePkg(extractDir, 0);
+
+	int state = 0;
+	do {
+		int ret = scePromoterUtilityGetState(&state);
+		if (ret < 0)
+			break;
+		sceKernelDelayThread(150 * 1000);
+	} while (state);
+	unloadPromoter();
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
 static int lua_demote(lua_State *L) {
 	int argc = lua_gettop(L);
 #ifndef SKIP_ERROR_HANDLING
@@ -1961,6 +2030,19 @@ static int lua_consoleprint(lua_State *L) {
 	return 0;
 }
 
+static int lua_recursiveDelete(lua_State *L) {
+	int argc = lua_gettop(L);
+#ifndef SKIP_ERROR_HANDLING
+	if (argc != 1)
+		return luaL_error(L, "wrong number of arguments");
+	if (!unsafe_mode)
+		return luaL_error(L, "this function requires unsafe mode");
+#endif
+	const char *path = luaL_checkstring(L, 1);
+	recursive_delete(path);
+	return 0;
+}
+
 //Register our System Functions
 static const luaL_Reg System_functions[] = {
 	{"openFile",                  lua_openfile},
@@ -2040,6 +2122,7 @@ static const luaL_Reg System_functions[] = {
 	{"unmountPartition",          lua_unmount},
 	{"mountPartition",            lua_mount},
 	{"installApp",                lua_promote},
+	{"installVpk",                lua_installVpk},
 	{"uninstallApp",              lua_demote},
 	{"doesAppExist",              lua_isappin},
 	{"getBootParams",             lua_bootparams},
@@ -2049,6 +2132,7 @@ static const luaL_Reg System_functions[] = {
 	{"unloadKernelPlugin",        lua_unloadkplugin},
 	{"unmountMountpoint",         lua_unmountvirtual},
 	{"consolePrint",              lua_consoleprint},
+	{"recursiveDelete",           lua_recursiveDelete},
 	{0, 0}
 };
 

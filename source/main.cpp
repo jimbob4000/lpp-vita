@@ -5,6 +5,7 @@
 #include <vitasdk.h>
 #include <vita2d.h>
 #include "include/luaplayer.h"
+#include "include/luaExtended.h"
 extern "C"{
 	#include "include/ftp/ftp.h"
 }
@@ -113,7 +114,11 @@ int main()
 				luaDatabase_init(L);
 				luaRegistry_init(L);
 				luaGui_init(L);
-				errored = luaL_dostring(L, script);
+				LuaExtended_init(L);
+				errored = luaL_loadbuffer(L, (const char*)script, size, "app0:/index.lua");
+				if (!errored) {
+					errored = lua_pcall(L, 0, 0, 0);
+				}
 				if (errored) {
 					strcpy(errorMsg, (char *)lua_tostring(L, -1));
 				}
