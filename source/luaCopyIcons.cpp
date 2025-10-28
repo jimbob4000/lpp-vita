@@ -70,39 +70,3 @@ void LuaCopyIcons_init(lua_State *L) {
     luaL_setfuncs(L, LuaCopyIcons_functions, 0);
     lua_setglobal(L, "CopyIcons");
 }
-
-// use the project's luaplayer header which includes the correct C++ Lua headers
-#include "include/luaplayer.h"
-
-// copyicons library provides these C functions in the static library; declare them here
-extern "C" {
-    int copy_decrypted_icon(const char *app_path);
-    int copy_decrypted_pic(const char *app_path);
-}
-
-static int l_system_copy_decrypted_icon(lua_State *L) {
-    const char *app_path = luaL_checkstring(L, 1);
-    int result = copy_decrypted_icon(app_path);
-    lua_pushboolean(L, result != 0);
-    return 1;
-}
-
-static int l_system_copy_decrypted_pic(lua_State *L) {
-    const char *app_path = luaL_checkstring(L, 1);
-    int result = copy_decrypted_pic(app_path);
-    lua_pushboolean(L, result != 0);
-    return 1;
-}
-
-//Register our LuaCopyIcons Functions
-static const luaL_Reg LuaCopyIcons_functions[] = {
-	{"copyDecryptedIcon",         l_system_copy_decrypted_icon},
-	{"copyDecryptedPic",          l_system_copy_decrypted_pic},
-	{0, 0}
-};
-
-void LuaCopyIcons_init(lua_State *L) {
-	lua_newtable(L);
-	luaL_setfuncs(L, LuaCopyIcons_functions, 0);
-	lua_setglobal(L, "CopyIcons");
-}
