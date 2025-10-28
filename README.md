@@ -12,9 +12,12 @@ The purpose of the fork is to extend functionality for [RetroFlow Launcher](http
 ### Changes
 For the most part changes have been sandboxed into the 'luaExtended.cpp' file so other functions are untouched and can be updated to match the main Lua Player Plus Vita repo.
 
-An additional library file has been added for copyicons. See my fork of [copyicons](https://github.com/jimbob4000/copyicons) (originally by cy33hc) for more information.
-
 Example uses of new functions can be found in version 8+ of [RetroFlow Launcher](https://github.com/jimbob4000/RetroFlow-Launcher).
+
+An additional library file has been added for copyicons. See my fork of [copyicons](https://github.com/jimbob4000/copyicons) for more information. Crecdit to cy33hc for the original copyicons.  
+
+Reading sfo files from PSP and PS1 games was made possible by using the code from [vita-launcher](https://github.com/cy33hc/vita-launcher) by cy33hc.
+
 
 ## Compiling the source
 
@@ -35,6 +38,8 @@ Official documentation: [http://rinnegatamante.github.io/lpp-vita/](http://rinne
 For the more information about Lua Player Plus Vita please see the [original repo](https://github.com/Rinnegatamante/lpp-vita).
 
 ## Credits
+* **cy33hc** for vita launcher and copyicons, his work has been inspiring.
+* Special thanks to **Rinnegatamante** for Lua Player Plus Vita plus for his help and support.
 * vitasdk contributors.
 * **xerpi** for vita2d and debug FTP code.
 * **gnmmarechal** for testing the interpreter.
@@ -45,5 +50,4 @@ For the more information about Lua Player Plus Vita please see the [original rep
 * **Arkanite** for providing a sample for sceAvPlayer used to implement the Video module.
 * **EasyRPG Team** for the Audio Decoder used for Sound module.
 * **lecram** for gifdec usd for animated GIFs support.
-* [cy33hc](https://github.com/cy33hc) for copyicons.
-* Special thanks to [Rinnegatamante](https://github.com/Rinnegatamante).
+
