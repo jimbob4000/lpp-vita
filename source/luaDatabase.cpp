@@ -55,7 +55,33 @@ static int sqlite_callback(void *data, int argc, char **argv, char **azColName){
 	lua_settable(L, -3);
 	return 0;
 }
-	
+
+static int sqlite_callback_extended(void *data, int argc, char **argv, char **azColName){
+	lua_State *L = (lua_State*)data;
+	// results table is stack index 3
+	int results_index = 3;
+	// create row table
+	lua_newtable(L);
+	// row table is now at top of stack
+	for (int i = 0; i < argc; i++) {
+		lua_pushstring(L, azColName[i]);
+		if (argv[i] != NULL)
+		    lua_pushstring(L, argv[i]);
+		else
+		    lua_pushnil(L);
+		lua_settable(L, -3);
+	}
+	// results[callback_results] = row
+	lua_pushinteger(L, callback_results++);
+	// copy row table
+	lua_pushvalue(L, -2);
+	// set into results table
+	lua_settable(L, results_index);
+	// remove original row table
+	lua_pop(L, 1);
+	return 0;
+}
+
 static int lua_opendb(lua_State *L){
 	int argc = lua_gettop(L);
 #ifndef SKIP_ERROR_HANDLING
@@ -98,12 +124,28 @@ static int lua_query(lua_State *L){
 	}
 	return 1;
 }
+
+static int lua_query_extended(lua_State *L){
+	int argc = lua_gettop(L);
+	if (argc != 2)
+		return luaL_error(L, "wrong number of arguments");
+	sqlite3 *db = (sqlite3*)luaL_checkinteger(L, 1);
+	const char *query = luaL_checkstring(L, 2);
+	callback_results = 1;
+	lua_newtable(L); // results table stays on stack
+	int fd = sqlite3_exec(db, query, sqlite_callback_extended, L, NULL);
+	if (fd != SQLITE_OK) {
+		return luaL_error(L, sqlite3_errmsg(db));
+	}
+	return 1;
+}
 	
 //Register our Database Functions
 static const luaL_Reg Database_functions[] = {
   {"open",                  lua_opendb},
   {"close",                 lua_closedb},
   {"execQuery",             lua_query},
+  {"execQueryExtended",     lua_query_extended},
   {0, 0}
 };
 
