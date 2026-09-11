@@ -28,6 +28,9 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Test tools
+tools/
+
 # =========================
 # Operating System Files
 # =========================

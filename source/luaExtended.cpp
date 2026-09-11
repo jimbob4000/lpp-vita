@@ -47,7 +47,7 @@
 #include "include/luaplayer.h"
 #include "include/unzip.h"
 #include "include/extended/iso.h"
-#include "include/extended/cso.h"
+#include "include/extended/compressed_iso.h"
 #include "include/extended/sfo.h"
 #include "include/extended/eboot.h"
 
@@ -122,11 +122,11 @@ static int extractSfoFromGame(const char* game_path, SfoInfo* info) {
             sfo_data = iso->ExtractSfoToMemory(&sfo_size);
             delete iso;
         }
-    } else if (CSO::isCSO(game_path_str)) {
-        CSO *cso = new CSO(game_path_str);
-        if (cso) {
-            sfo_data = cso->ExtractSfoToMemory(&sfo_size);
-            delete cso;
+    } else if (CompressedISO::isCompressedISO(game_path_str)) {
+        CompressedISO *compressed_iso = new CompressedISO(game_path_str);
+        if (compressed_iso) {
+            sfo_data = compressed_iso->ExtractSfoToMemory(&sfo_size);
+            delete compressed_iso;
         }
     } else if (game_path_str.length() >= 4 && 
                (game_path_str.substr(game_path_str.length() - 4) == ".pbp" ||
@@ -242,7 +242,7 @@ static int lua_extractsfopspx(lua_State *L) {
 	return 1;
 }
 
-// Internal C++ function for extracting PIC1.PNG from ISO/CSO games
+// Internal C++ function for extracting PIC1.PNG from PSP ISO/compressed ISO games
 static int extractImageFromPSPGame(const char* game_path, const char* dest_path) {
 	std::string game_path_str(game_path);
 	
@@ -274,7 +274,7 @@ static int extractImageFromPSPGame(const char* game_path, const char* dest_path)
 	
 	bool extraction_success = false;
 	
-	// Check file type and extract PIC1.PNG accordingly - only ISO and CSO supported
+	// Check file type and extract PIC1.PNG accordingly
 	if (ISO::isISO(game_path_str)) {
 		ISO *iso = new ISO(game_path_str);
 		if (iso) {
@@ -289,13 +289,13 @@ static int extractImageFromPSPGame(const char* game_path, const char* dest_path)
 				extraction_success = true;
 			}
 		}
-	} else if (CSO::isCSO(game_path_str)) {
-		CSO *cso = new CSO(game_path_str);
-		if (cso) {
+	} else if (CompressedISO::isCompressedISO(game_path_str)) {
+		CompressedISO *compressed_iso = new CompressedISO(game_path_str);
+		if (compressed_iso) {
 			// Ensure parent directory exists
 			ensure_parent_dir(dest_path);
-			cso->ExtractPic1(dest_path);
-			delete cso;
+			compressed_iso->ExtractPic1(dest_path);
+			delete compressed_iso;
 			// Check if PIC1.PNG was extracted successfully
 			SceUID check_file = sceIoOpen(dest_path, SCE_O_RDONLY, 0777);
 			if (check_file >= 0) {
@@ -317,7 +317,7 @@ static int lua_pspgetpic1(lua_State *L) {
 	const char* game_path = luaL_checkstring(L, 1);
 	const char* dest_path = luaL_checkstring(L, 2);
 	
-	// Extract PIC1.PNG from ISO/CSO games only
+	// Extract PIC1.PNG from PSP ISO/compressed ISO games
 	int result = extractImageFromPSPGame(game_path, dest_path);
 	
 	lua_pushboolean(L, result);

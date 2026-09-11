@@ -1,5 +1,5 @@
 TARGET		:= lpp-vita
-SOURCES	:= source/include/ftp source/include source source/include/audiodec source/include/extended
+SOURCES	:= source/include/ftp source/include source source/include/audiodec source/include/extended source/include/lz4
 
 LIBS = -Llibs -lcopyicons -lcurl -lssl -lcrypto -lvorbisfile -lvorbis -logg -lsndfile -lvita2d -lSceLibKernel_stub -lScePvf_stub \
 	-limgui_vita2d -lSceJpegEnc_stub -lSceAppMgr_stub -lSceCtrl_stub -lSceTouch_stub -lSceMotion_stub \
