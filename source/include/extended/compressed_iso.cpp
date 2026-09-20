@@ -15,6 +15,7 @@ extern "C" {
 
 const uint32_t CompressedISO::DAX_FRAME_SIZE = 0x2000;
 const uint32_t CompressedISO::INDEX_FLAG = 0x80000000;
+static const uint32_t CACHE_GUARD_SIZE = ISO::SECTOR_SIZE;
 
 static uint32_t read_le32(const unsigned char *p)
 {
@@ -29,34 +30,46 @@ static uint64_t read_le64(const unsigned char *p)
 CompressedISO::CompressedISO(std::string path)
 : ISO(path),
   mFormat(COMPRESSED_ISO_UNKNOWN),
-  mTotalBytes(0),
-  mBlockSize(ISO::SECTOR_SIZE),
-  mTotalBlock(0),
-  mHeaderSize(0),
-  mAlign(0),
-  mReady(false),
-  mCache(NULL),
-  mCacheBlock(0),
-  mCacheValid(false)
+	  mTotalBytes(0),
+	  mBlockSize(ISO::SECTOR_SIZE),
+	  mTotalBlock(0),
+	  mHeaderSize(0),
+	  mFileSize(0),
+	  mAlign(0),
+	  mReady(false),
+	  mCacheAlloc(NULL),
+	  mCache(NULL),
+	  mCacheBlock(0),
+	  mCacheValid(false)
 {
 	mReady = init();
 }
 
 CompressedISO::~CompressedISO()
 {
-	if (mCache) {
-		free(mCache);
+	if (mCacheAlloc) {
+		free(mCacheAlloc);
+		mCacheAlloc = NULL;
 		mCache = NULL;
 	}
 }
 
 void CompressedISO::ExtractPic1(std::string pic_path)
 {
+	if (!mReady) {
+		return;
+	}
 	ISO::ExtractPic1(pic_path);
 }
 
 void* CompressedISO::ExtractSfoToMemory(uint32_t* out_size)
 {
+	if (out_size) {
+		*out_size = 0;
+	}
+	if (!mReady) {
+		return NULL;
+	}
 	return ISO::ExtractSfoToMemory(out_size);
 }
 
@@ -81,6 +94,13 @@ bool CompressedISO::init()
 	if (!mFin.is_open()) {
 		return false;
 	}
+
+	mFin.seekg(0, std::ios::end);
+	std::streampos endPos = mFin.tellg();
+	if (endPos <= 0) {
+		return false;
+	}
+	mFileSize = (uint64_t)endPos;
 
 	unsigned char header[32];
 	memset(header, 0, sizeof(header));
@@ -112,12 +132,20 @@ bool CompressedISO::initCisoLike(unsigned char *header)
 	mBlockSize = read_le32(header + 16);
 	mAlign = header[21];
 
-	if (mHeaderSize < 24 || mTotalBytes == 0 || mBlockSize < ISO::SECTOR_SIZE) {
+	if (mHeaderSize < 24 || mHeaderSize > mFileSize || mTotalBytes == 0 ||
+	    mBlockSize < ISO::SECTOR_SIZE || mBlockSize > 2 * 1024 * 1024 ||
+	    (mBlockSize % ISO::SECTOR_SIZE) != 0 || mAlign > 31) {
+		return false;
+	}
+	if ((mTotalBytes + mBlockSize - 1) / mBlockSize > 0xFFFFFFFFULL) {
 		return false;
 	}
 
 	mTotalBlock = (uint32_t)((mTotalBytes + mBlockSize - 1) / mBlockSize);
 	mIndex.resize(mTotalBlock + 1);
+	if ((uint64_t)mHeaderSize + ((uint64_t)mIndex.size() * sizeof(uint32_t)) > mFileSize) {
+		return false;
+	}
 
 	mFin.seekg(mHeaderSize, std::ios::beg);
 	mFin.read((char*)&mIndex[0], mIndex.size() * sizeof(uint32_t));
@@ -125,8 +153,7 @@ bool CompressedISO::initCisoLike(unsigned char *header)
 		return false;
 	}
 
-	mCache = (char*)malloc(mBlockSize);
-	return mCache != NULL;
+	return allocCache() && validateIsoPayload();
 }
 
 bool CompressedISO::initDax(unsigned char *header)
@@ -149,6 +176,10 @@ bool CompressedISO::initDax(unsigned char *header)
 	mDaxIndex.resize(mTotalBlock);
 	mDaxSize.resize(mTotalBlock);
 	mDaxPlain.assign(mTotalBlock, 0);
+	uint64_t daxTableEnd = 32 + ((uint64_t)mTotalBlock * sizeof(uint32_t)) + ((uint64_t)mTotalBlock * sizeof(uint16_t)) + ((uint64_t)ncAreas * 8);
+	if (daxTableEnd > mFileSize) {
+		return false;
+	}
 
 	mFin.seekg(32, std::ios::beg);
 	mFin.read((char*)&mDaxIndex[0], mTotalBlock * sizeof(uint32_t));
@@ -173,8 +204,46 @@ bool CompressedISO::initDax(unsigned char *header)
 		}
 	}
 
-	mCache = (char*)malloc(mBlockSize);
-	return mCache != NULL;
+	return allocCache() && validateIsoPayload();
+}
+
+bool CompressedISO::allocCache()
+{
+	uint64_t allocSize = (uint64_t)mBlockSize + (CACHE_GUARD_SIZE * 2);
+	if (allocSize > 2 * 1024 * 1024 + (CACHE_GUARD_SIZE * 2)) {
+		return false;
+	}
+
+	mCacheAlloc = (char*)malloc((size_t)allocSize);
+	if (!mCacheAlloc) {
+		return false;
+	}
+
+	memset(mCacheAlloc, 0, (size_t)allocSize);
+	mCache = mCacheAlloc + CACHE_GUARD_SIZE;
+	return true;
+}
+
+bool CompressedISO::validateIsoPayload()
+{
+	uint64_t logicalPos = (uint64_t)16 * ISO::SECTOR_SIZE;
+	if (logicalPos + ISO::SECTOR_SIZE > mTotalBytes) {
+		return false;
+	}
+
+	uint32_t block = (uint32_t)(logicalPos / mBlockSize);
+	uint32_t offset = (uint32_t)(logicalPos - ((uint64_t)block * mBlockSize));
+	if (offset + ISO::SECTOR_SIZE > mBlockSize) {
+		return false;
+	}
+	if (!readBlock(block)) {
+		return false;
+	}
+
+	char *sector = mCache + offset;
+	return sector[0] == 0x01 &&
+	       memcmp(sector + 1, "CD001", 5) == 0 &&
+	       sector[6] == 0x01;
 }
 
 bool CompressedISO::readBlock(uint32_t block)
@@ -208,7 +277,7 @@ bool CompressedISO::readCisoLikeBlock(uint32_t block)
 	uint32_t next = mIndex[block + 1];
 	uint64_t pos = (uint64_t)(entry & ~INDEX_FLAG) << mAlign;
 	uint64_t nextPos = (uint64_t)(next & ~INDEX_FLAG) << mAlign;
-	if (nextPos < pos) {
+	if (nextPos < pos || pos > mFileSize || nextPos > mFileSize) {
 		return false;
 	}
 
@@ -239,6 +308,9 @@ bool CompressedISO::readCisoLikeBlock(uint32_t block)
 	}
 
 	if (plain) {
+		if (pos + readable > mFileSize) {
+			return false;
+		}
 		mFin.seekg((std::streamoff)pos, std::ios::beg);
 		mFin.read(mCache, readable);
 		mCacheValid = mFin.gcount() == (std::streamsize)readable;
@@ -275,6 +347,10 @@ bool CompressedISO::readDaxBlock(uint32_t block)
 
 	uint32_t storedSize = mDaxSize[block];
 	uint32_t readSize = mDaxPlain[block] ? DAX_FRAME_SIZE : storedSize;
+	if ((uint64_t)mDaxIndex[block] + readSize > mFileSize) {
+		return false;
+	}
+
 	void *data = malloc(readSize);
 	if (!data) {
 		return false;
@@ -331,6 +407,9 @@ int CompressedISO::readSector(char *destBuf, unsigned sector)
 
 	uint32_t block = (uint32_t)(logicalPos / mBlockSize);
 	uint32_t offset = (uint32_t)(logicalPos - ((uint64_t)block * mBlockSize));
+	if (offset + ISO::SECTOR_SIZE > mBlockSize) {
+		return -4;
+	}
 	if (!readBlock(block)) {
 		return -3;
 	}

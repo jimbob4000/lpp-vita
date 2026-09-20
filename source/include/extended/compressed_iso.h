@@ -25,25 +25,29 @@ private:
 
 	CompressedISOFormat mFormat;
 	uint64_t mTotalBytes;
-	uint32_t mBlockSize;
-	uint32_t mTotalBlock;
-	uint32_t mHeaderSize;
-	uint8_t mAlign;
-	bool mReady;
+		uint32_t mBlockSize;
+		uint32_t mTotalBlock;
+		uint32_t mHeaderSize;
+		uint64_t mFileSize;
+		uint8_t mAlign;
+		bool mReady;
 
 	std::vector<uint32_t> mIndex;
 	std::vector<uint32_t> mDaxIndex;
 	std::vector<uint16_t> mDaxSize;
 	std::vector<uint8_t> mDaxPlain;
 
-	char *mCache;
-	uint32_t mCacheBlock;
-	bool mCacheValid;
+		char *mCacheAlloc;
+		char *mCache;
+		uint32_t mCacheBlock;
+		bool mCacheValid;
 
-	bool init();
-	bool initCisoLike(unsigned char *header);
-	bool initDax(unsigned char *header);
-	bool readBlock(uint32_t block);
+		bool init();
+		bool initCisoLike(unsigned char *header);
+		bool initDax(unsigned char *header);
+		bool allocCache();
+		bool validateIsoPayload();
+		bool readBlock(uint32_t block);
 	bool readCisoLikeBlock(uint32_t block);
 	bool readDaxBlock(uint32_t block);
 	bool inflateBlock(const void *src, uint32_t srcSize, void *dst, uint32_t dstSize, int windowBits);
